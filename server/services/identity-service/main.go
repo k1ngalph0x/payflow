@@ -3,11 +3,13 @@ package main
 import (
 	"fmt"
 	"log"
+	"net/http"
 
 	"github.com/gin-gonic/gin"
 	"github.com/k1ngalph0x/payflow/auth-service/api"
 	"github.com/k1ngalph0x/payflow/auth-service/config"
 	"github.com/k1ngalph0x/payflow/auth-service/db"
+	"github.com/k1ngalph0x/payflow/auth-service/middleware"
 )
 
 func main() {
@@ -27,8 +29,9 @@ func main() {
 	defer conn.Close()
 
 	handler := api.NewHandler(conn, cfg)
+	authMiddleware := middleware.NewAuthMiddleware(cfg)
 
-	//1. Do move to the routes file
+
 	//Routes config
 	router := gin.Default()
 	router.Use(gin.Logger())
@@ -36,10 +39,20 @@ func main() {
 	auth := router.Group("/auth")
 	auth.POST("/signup", handler.SignUp)
 	auth.POST("/signin", handler.SignIn)
-	//////////
+	///////////////////////////////////
 
+	protected := router.Group("/api")
+	protected.Use(authMiddleware.RequireAuth())
+	{
+		protected.GET("/profile", Profile)
+	}
 
+	/////////////////////////////////
 	router.Run(":8080")
 
 	fmt.Println("Running auth-service")
+}
+
+func Profile(c *gin.Context){
+	c.JSON(http.StatusOK, gin.H{"Message":"profile page"})
 }

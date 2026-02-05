@@ -21,6 +21,7 @@ type Handler struct{
 type SignUpRequest struct{
 	Email     string    `json:"email"`
 	Password  string    `json:"password"`
+	Role 	  string 	`json:"role"`
 }
 
 type SignInRequest struct{
@@ -31,6 +32,7 @@ type SignInRequest struct{
 type Claims struct{
 	UserID string `json:"user_id"`
 	Email string `json:"email"`
+	Role string `json:"role"`
 	jwt.RegisteredClaims
 }
 
@@ -38,12 +40,13 @@ func NewHandler(db *sql.DB, cfg *config.Config) *Handler {
 	return &Handler{DB: db, Config: cfg}
 }
 
-func(h *Handler) GenerateJWT(userId, email string)(string, error){
+func(h *Handler) GenerateJWT(userId, email, role string)(string, error){
 
 	expiration := time.Now().Add(24 * time.Hour)
 
 	claims := &Claims{
 		UserID: userId,
+		Role: role,
 		Email: email,
 		RegisteredClaims: jwt.RegisteredClaims{
 			ExpiresAt: jwt.NewNumericDate(expiration),
@@ -84,6 +87,12 @@ func(h *Handler) SignUp(c *gin.Context) {
 		return 
 	}
 
+	//check the role
+	if req.Role != "user" && req.Role != "merchant"{
+		c.JSON(http.StatusBadRequest, gin.H{"error":"Role must be user or merchant"})
+		return 
+	}
+
 	email := strings.ToLower(strings.TrimSpace(req.Email))
 	password := strings.TrimSpace(req.Password)
 
@@ -118,15 +127,16 @@ func(h *Handler) SignUp(c *gin.Context) {
 	// `
 
 	insertQuery := `
-	INSERT INTO payflow_auth (email, password) 
-	VALUES ($1, $2)
+	INSERT INTO payflow_auth (email, password, role) 
+	VALUES ($1, $2, $3)
 	`
 	//_, err = h.DB.Exec(insertQuery, email, string(hashedPassword), created_at, updated_at)
-	_, err = h.DB.Exec(insertQuery, email, string(hashedPassword))
+	_, err = h.DB.Exec(insertQuery, email, string(hashedPassword), req.Role)
 	if err!=nil{
 		c.JSON(http.StatusInternalServerError, gin.H{"error":"Failed to create a new user"})
 		return 
 	}
+
 	selectQuery := `SELECT id FROM payflow_auth
 					WHERE email = $1`
 	err = h.DB.QueryRow(selectQuery, email).Scan(&userId)
@@ -136,20 +146,23 @@ func(h *Handler) SignUp(c *gin.Context) {
 	}
 
 
-	token, err := h.GenerateJWT(userId, email)
+	token, err := h.GenerateJWT(userId, email, req.Role)
 	if err!=nil{
-		c.JSON(http.StatusInternalServerError, gin.H{"error":"Failed to create a new user"})
+		//c.JSON(http.StatusInternalServerError, gin.H{"error":"Failed to create a new user"})
+		c.JSON(http.StatusInternalServerError, gin.H{"error":"Something went wrong"})
 		return 
 	}
 
-	c.JSON(http.StatusCreated, gin.H{"message":"User created successfully", "token":token})
+	c.JSON(http.StatusCreated, gin.H{"message":"User created successfully", "token":token, "role": req.Role})
 }
 
 func(h *Handler) SignIn(c *gin.Context) {
-	var req SignInRequest
+	var role string
 	var userId string
 	var userEmail string
+	var req SignInRequest
 	var hashedPassword string
+
 
 	err := c.ShouldBindJSON(&req)
 	if err != nil{
@@ -165,10 +178,10 @@ func(h *Handler) SignIn(c *gin.Context) {
 	email := strings.ToLower(strings.TrimSpace(req.Email))
 
 	//existing mail chech
-	selectQuery := `SELECT id, email, password FROM payflow_auth 
+	selectQuery := `SELECT id, email, password, role FROM payflow_auth 
 					WHERE email = $1`
 	
-	err = h.DB.QueryRow(selectQuery, email).Scan(&userId, &userEmail, &hashedPassword)
+	err = h.DB.QueryRow(selectQuery, email).Scan(&userId, &userEmail, &hashedPassword, &role)
 
 	if err == sql.ErrNoRows{
 		c.JSON(http.StatusUnauthorized, gin.H{"error":"Invalid credentials"})
@@ -187,7 +200,7 @@ func(h *Handler) SignIn(c *gin.Context) {
 		return 
 	}
 
-	token, err := h.GenerateJWT(userId, email)
+	token, err := h.GenerateJWT(userId, email, role)
 
 	if err!=nil{
 		c.JSON(http.StatusInternalServerError, gin.H{"error":"Failed to create a new user"})
@@ -195,5 +208,5 @@ func(h *Handler) SignIn(c *gin.Context) {
 	}
 
 
-	c.JSON(http.StatusOK, gin.H{"message":"Login successful", "token":token})
+	c.JSON(http.StatusOK, gin.H{"message":"Login successful", "token":token, "role":role})
 }

@@ -119,6 +119,9 @@ web_modules/
 .next
 out
 
+*todos
+todos.md
+
 # Nuxt.js build / generate output
 .nuxt
 dist
