@@ -1,0 +1,1 @@
+DROP TABLE IF EXISTS payflow_wallet_transactions;

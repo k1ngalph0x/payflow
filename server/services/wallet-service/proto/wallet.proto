@@ -1,0 +1,63 @@
+syntax = "proto3";
+
+
+package wallet;
+
+option go_package = "./proto;walletpb";
+
+service WalletService {
+    rpc CreateWallet (CreateWalletRequest) returns (CreateWalletResponse);
+    rpc GetBalance (GetBalanceRequest) returns (GetBalanceResponse);
+    rpc Credit (CreditRequest) returns (TransactionResponse);
+    rpc Debit (DebitRequest) returns (TransactionResponse);
+    rpc GetTransactions (GetTransactionsRequest) returns (GetTransactionsResponse);
+}
+
+message CreateWalletRequest {
+    string user_id = 1;
+}
+
+message CreateWalletResponse {
+    string wallet_id = 1;
+}
+
+message GetBalanceRequest {
+   string user_id = 1;
+}
+
+message GetBalanceResponse {
+    double balance = 1;
+}
+
+message CreditRequest {
+    string user_id = 1;
+    double amount = 2;
+    string reference = 3;
+}
+
+message DebitRequest {
+    string user_id = 1;
+    double amount = 2;
+    string reference = 3;
+}
+
+message TransactionResponse {
+    string transaction_id = 1;
+    string status = 2;
+}
+
+message GetTransactionsRequest {
+    string user_id = 1;
+}
+
+message Transaction {
+    string id = 1;
+    string type = 2;
+    double amount = 3;
+    string status  = 4;
+    string created_at = 5;
+}
+
+message GetTransactionsResponse {
+    repeated Transaction transactions = 1;
+}
