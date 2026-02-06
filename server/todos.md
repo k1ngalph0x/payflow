@@ -32,6 +32,8 @@ go get google.golang.org/grpc
 
 protoc \ --go_out=. \ --go-grpc_out=. \ proto/wallet.proto
 
+protoc --go_out=. --go-grpc_out=. proto/wallet.proto - run this in wallet-service
+
 make migrate-up # Run migrations
 make migrate-down # Rollback last migration
 make migrate-create # Create new migration
