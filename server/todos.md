@@ -17,6 +17,8 @@ go get github.com/lib/pq
 
 go get -u github.com/gin-gonic/gin
 
+go get github.com/google/uuid
+
 go install -tags 'postgres' github.com/golang-migrate/migrate/v4/cmd/migrate@latest
 
 migrate create -ext sql -dir db/migrations -seq create_payflow_auth_table
