@@ -1,17 +1,22 @@
 package api
 
 import (
+	"context"
 	"database/sql"
 	"net/http"
+	"time"
 
 	"github.com/gin-gonic/gin"
 	"github.com/google/uuid"
 	"github.com/k1ngalph0x/payflow/payment-service/config"
+	grpcclient "github.com/k1ngalph0x/payflow/wallet-service/grpc"
+	walletpb "github.com/k1ngalph0x/payflow/wallet-service/proto"
 )
 
 type PaymentHandler struct {
 	DB *sql.DB
 	Config *config.Config
+	WalletClient *grpcclient.WalletClient
 }
 
 type CreatePaymentRequest struct{
@@ -19,8 +24,8 @@ type CreatePaymentRequest struct{
 	Amount float64 `json:"amount"`
 }
 
-func NewPaymentHandler(db *sql.DB, cfg *config.Config)*PaymentHandler{
-	return &PaymentHandler{DB: db, Config: cfg}
+func NewPaymentHandler(db *sql.DB, cfg *config.Config, walletClient *grpcclient.WalletClient)*PaymentHandler{
+	return &PaymentHandler{DB: db, Config: cfg, WalletClient: walletClient}
 }
 
 
@@ -43,8 +48,43 @@ func (h *PaymentHandler) CreatePayment(c *gin.Context){
 		c.JSON(http.StatusInternalServerError, gin.H{"error":"failed to create payment"})
 	}
 
+	ctx, cancel := context.WithTimeout(context.Background(), 5 * time.Second)
+	defer cancel()
+
+	resp, err := h.WalletClient.Client.Debit(ctx, &walletpb.DebitRequest{
+		UserId: userId,
+		Amount: req.Amount,
+		Reference: ref,
+	})
+
+	if err != nil{
+		query := `UPDATE payflow_payments SET status = 'FAILED WHERE reference = $1`
+		h.DB.Exec(query, ref)
+
+		c.JSON(http.StatusInternalServerError, gin.H{"error":"wallet debit failed"})
+		return 
+	}
+
+	if resp.Status != "SUCCESS"{
+		updateQuery := `UPDATE payflow_payments SET status = "FAILED" WHERE reference=$1`
+		h.DB.Exec(updateQuery, ref)
+
+		c.JSON(http.StatusPaymentRequired, gin.H{"status":resp.Status})
+		return 
+	}
+
+	updateQuery := `UPDATE payflow_payments SET status = 'SUCCESS' WHERE reference=$1`
+	_, err = h.DB.Exec(
+		updateQuery, ref,
+	)
+
+	if err != nil{
+		c.JSON(http.StatusInternalServerError, gin.H{"error":"payment update failed"})
+		return 
+	}
+
 	c.JSON(http.StatusCreated, gin.H{
-		"reference":ref,
-		"status":"PENDING",
+		"reference": ref,
+		"status":"SUCCESS",
 	})
 }

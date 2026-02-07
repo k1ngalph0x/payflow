@@ -17,6 +17,7 @@ type Config struct {
 
 type TokenConfig struct{
 	JwtKey string
+
 }
 
 type PostgresConfig struct {

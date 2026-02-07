@@ -116,14 +116,15 @@ func (h *WalletHandler) Debit(ctx context.Context, req *walletpb.DebitRequest)(*
 
 	txnQuery := `INSERT INTO payflow_wallet_transactions
 	(wallet_id, user_id, type, amount, reference, status)
-	VALUES ($1, $2, 'DEBIT', $3, $4, 'SUCCESS')
+	VALUES ($1, $2, 'DEBIT', $3, $4, 'SUCCESS') RETURNING id
 	`
 	err = tx.QueryRow(txnQuery, walletID, req.UserId, req.Amount, req.Reference).Scan(&txnId)
 	if err!= nil{
 		return nil, err
 	}
 
-	updateTxnQuery := `UPDATE payflow_wallets SET balance - $1, updated_at = NOW()
+	updateTxnQuery := `UPDATE payflow_wallets 
+	SET balance = balance - $1, updated_at = NOW()
 	WHERE id = $2`
 	_, err = tx.Exec(updateTxnQuery, req.Amount, walletID)
 
@@ -174,7 +175,8 @@ func(h *WalletHandler) Credit(ctx context.Context, req *walletpb.CreditRequest)(
 		return nil, err
 	}
 
-	updateTxnQuery := `UPDATE payflow_wallets SET balance + $1, updated_at = NOW()
+	updateTxnQuery := `UPDATE payflow_wallets 
+	SET balance = balance + $1, updated_at = NOW()
 	WHERE id = $2`
 	_, err = tx.Exec(updateTxnQuery, req.Amount, walletID)
 

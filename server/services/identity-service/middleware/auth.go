@@ -7,18 +7,25 @@ import (
 
 	"github.com/gin-gonic/gin"
 	"github.com/golang-jwt/jwt/v5"
-	"github.com/k1ngalph0x/payflow/auth-service/api"
-	"github.com/k1ngalph0x/payflow/auth-service/config"
+	"github.com/k1ngalph0x/payflow/identity-service/api"
 )
 
+// type AuthMiddleware struct {
+// 	Config *config.Config
+// }
+
+// func NewAuthMiddleware(cfg *config.Config) *AuthMiddleware {
+// 	return &AuthMiddleware{Config: cfg}
+// }
+
 type AuthMiddleware struct {
-	Config *config.Config
+	JwtKey string
 }
 
-
-func NewAuthMiddleware(cfg *config.Config) *AuthMiddleware {
-	return &AuthMiddleware{Config: cfg}
+func NewAuthMiddleware(jwtKey string) *AuthMiddleware {
+	return &AuthMiddleware{JwtKey: jwtKey}
 }
+
 
 
 func (a *AuthMiddleware) RequireAuth() gin.HandlerFunc {
@@ -45,7 +52,8 @@ func (a *AuthMiddleware) RequireAuth() gin.HandlerFunc {
 				return nil, fmt.Errorf("unexpected signing method")
 			}
 
-			return []byte(a.Config.TOKEN.JwtKey), nil
+			//return []byte(a.Config.TOKEN.JwtKey), nil
+			return []byte(a.JwtKey), nil
 		})
 
 		if err !=nil || !token.Valid{

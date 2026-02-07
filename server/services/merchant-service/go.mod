@@ -1,14 +1,13 @@
-module github.com/k1ngalph0x/payflow/identity-service
+module github.com/k1ngalph0x/payflow/merchant-service
 
 go 1.25.2
 
 require (
 	github.com/gin-gonic/gin v1.11.0
-	github.com/golang-jwt/jwt/v5 v5.3.1
 	github.com/joho/godotenv v1.5.1
-	github.com/k1ngalph0x/payflow/wallet-service v0.0.0
+	github.com/k1ngalph0x/payflow/identity-service v0.0.0
+	github.com/k1ngalph0x/payflow/payment-service v0.0.0-00010101000000-000000000000
 	github.com/lib/pq v1.11.1
-	golang.org/x/crypto v0.47.0
 )
 
 require (
@@ -23,7 +22,9 @@ require (
 	github.com/go-playground/validator/v10 v10.30.1 // indirect
 	github.com/goccy/go-json v0.10.5 // indirect
 	github.com/goccy/go-yaml v1.19.2 // indirect
+	github.com/golang-jwt/jwt/v5 v5.3.1 // indirect
 	github.com/json-iterator/go v1.1.12 // indirect
+	github.com/k1ngalph0x/payflow/wallet-service v0.0.0 // indirect
 	github.com/klauspost/cpuid/v2 v2.3.0 // indirect
 	github.com/leodido/go-urn v1.4.0 // indirect
 	github.com/mattn/go-isatty v0.0.20 // indirect
@@ -35,6 +36,7 @@ require (
 	github.com/twitchyliquid64/golang-asm v0.15.1 // indirect
 	github.com/ugorji/go/codec v1.3.1 // indirect
 	golang.org/x/arch v0.23.0 // indirect
+	golang.org/x/crypto v0.47.0 // indirect
 	golang.org/x/net v0.49.0 // indirect
 	golang.org/x/sys v0.40.0 // indirect
 	golang.org/x/text v0.33.0 // indirect
@@ -43,4 +45,8 @@ require (
 	google.golang.org/protobuf v1.36.11 // indirect
 )
 
+replace github.com/k1ngalph0x/payflow/identity-service => ../identity-service
+
 replace github.com/k1ngalph0x/payflow/wallet-service => ../wallet-service
+
+replace github.com/k1ngalph0x/payflow/payment-service => ../payment-service

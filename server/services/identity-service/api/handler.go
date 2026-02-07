@@ -9,13 +9,15 @@ import (
 
 	"github.com/gin-gonic/gin"
 	"github.com/golang-jwt/jwt/v5"
-	"github.com/k1ngalph0x/payflow/auth-service/config"
+	"github.com/k1ngalph0x/payflow/identity-service/config"
+	grpcclient "github.com/k1ngalph0x/payflow/wallet-service/grpc"
 	"golang.org/x/crypto/bcrypt"
 )
 
 type Handler struct{
 	DB *sql.DB
 	Config *config.Config
+	WalletClient *grpcclient.WalletClient
 }
 
 type SignUpRequest struct{
@@ -36,8 +38,8 @@ type Claims struct{
 	jwt.RegisteredClaims
 }
 
-func NewHandler(db *sql.DB, cfg *config.Config) *Handler {
-	return &Handler{DB: db, Config: cfg}
+func NewHandler(db *sql.DB, cfg *config.Config, walletclient *grpcclient.WalletClient) *Handler {
+	return &Handler{DB: db, Config: cfg, WalletClient: walletclient}
 }
 
 func(h *Handler) GenerateJWT(userId, email, role string)(string, error){
@@ -150,6 +152,12 @@ func(h *Handler) SignUp(c *gin.Context) {
 	if err!=nil{
 		//c.JSON(http.StatusInternalServerError, gin.H{"error":"Failed to create a new user"})
 		c.JSON(http.StatusInternalServerError, gin.H{"error":"Something went wrong"})
+		return 
+	}
+
+	err = h.WalletClient.CreateWallet(userId)
+	if err != nil{
+		c.JSON(http.StatusInternalServerError, gin.H{"error":"Failed to create wallet"})
 		return 
 	}
 

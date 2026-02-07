@@ -4,7 +4,7 @@ import (
 	"database/sql"
 	"fmt"
 
-	"github.com/k1ngalph0x/payflow/identity-service/config"
+	"github.com/k1ngalph0x/payflow/merchant-service/config"
 	_ "github.com/lib/pq"
 )
 
