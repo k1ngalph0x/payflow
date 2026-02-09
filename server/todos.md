@@ -19,6 +19,8 @@ go get -u github.com/gin-gonic/gin
 
 go get github.com/google/uuid
 
+github.com/rabbitmq/amqp091-go
+
 go install -tags 'postgres' github.com/golang-migrate/migrate/v4/cmd/migrate@latest
 
 migrate create -ext sql -dir db/migrations -seq create_payflow_auth_table
@@ -79,3 +81,21 @@ merchant usr id auth - 0ecc89c3-eb1d-4997-b761-61522078311c
 
 DROP TABLE IF EXISTS payflow_merchants CASCADE;
 DROP TABLE IF EXISTS schema_migrations;
+
+INTERNAL:
+email - platform@payflow.internal
+role - platform
+password - internal
+id : "646b4308-a1d0-4407-85a5-8208d0bb67e0"
+
+RABBIT MQ
+docker run -d --hostname payflow-rabbit \
+ --name rabbitmq \
+ -p 5672:5672 \
+ -p 15672:15672 \
+ rabbitmq:3-management
+
+http://localhost:15672
+guest / guest
+
+docker run -d --name rabbitmq -p 5672:5672 -p 15672:15672 rabbitmq:3-management

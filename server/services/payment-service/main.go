@@ -9,6 +9,8 @@ import (
 	"github.com/k1ngalph0x/payflow/payment-service/api"
 	"github.com/k1ngalph0x/payflow/payment-service/config"
 	"github.com/k1ngalph0x/payflow/payment-service/db"
+	"github.com/k1ngalph0x/payflow/payment-service/internal/events"
+	"github.com/k1ngalph0x/payflow/payment-service/internal/worker"
 )
 
 func main() {
@@ -30,8 +32,17 @@ func main() {
 	if err != nil{
 		log.Fatal(err)
 	}
+	
+	publisher, err := events.NewPublisher(cfg.PLATFORM.RabbitMQURL)
+	if err != nil{
+		log.Fatal(err)
+	}
+	defer publisher.Conn.Close()
+	defer publisher.Channel.Close()
 
-	handler := api.NewPaymentHandler(conn, cfg, walletClient)
+	go worker.StartSettlementWorker(conn, cfg, walletClient, cfg.PLATFORM.RabbitMQURL)
+
+	handler := api.NewPaymentHandler(conn, cfg,  publisher)
 	authMiddleware := middleware.NewAuthMiddleware(cfg.TOKEN.JwtKey)
 
 	router := gin.Default()
@@ -40,7 +51,7 @@ func main() {
 	router.Use(authMiddleware.RequireAuth())
 
 	router.POST("/payments", handler.CreatePayment)
-	router.POST("/payments/:reference/settle", handler.SettlePayment) 
+	//router.POST("/payments/:reference/settle", handler.SettlePayment) 
 
 	router.Run(":8081")
 }

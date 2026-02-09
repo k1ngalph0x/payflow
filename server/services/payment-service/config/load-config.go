@@ -13,10 +13,17 @@ import (
 type Config struct {
 	DB PostgresConfig
 	TOKEN TokenConfig
+	PLATFORM PlatformConfig
+	
 }
 
 type TokenConfig struct{
 	JwtKey string
+}
+
+type PlatformConfig struct{
+	PlatformUserID string
+	RabbitMQURL string
 }
 
 type PostgresConfig struct {
@@ -48,6 +55,11 @@ func LoadConfig() (*Config, error) {
 
 		TOKEN: TokenConfig{
 			JwtKey: os.Getenv("JwtKey"),
+		},
+
+		PLATFORM: PlatformConfig{
+			PlatformUserID: os.Getenv("PLATFORM_USER_ID"),
+			RabbitMQURL: os.Getenv("RABBITMQ_URL"),
 		},
 	}
 
