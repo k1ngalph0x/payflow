@@ -6,10 +6,12 @@ require (
 	github.com/gin-gonic/gin v1.11.0
 	github.com/golang-jwt/jwt/v5 v5.3.1
 	github.com/joho/godotenv v1.5.1
-	github.com/k1ngalph0x/payflow/wallet-service v0.0.0
+	github.com/k1ngalph0x/payflow/client v0.0.0
 	github.com/lib/pq v1.11.1
 	golang.org/x/crypto v0.47.0
 )
+
+require github.com/k1ngalph0x/payflow/wallet-service v0.0.0-00010101000000-000000000000 // indirect
 
 require (
 	github.com/bytedance/gopkg v0.1.3 // indirect
@@ -42,5 +44,8 @@ require (
 	google.golang.org/grpc v1.78.0 // indirect
 	google.golang.org/protobuf v1.36.11 // indirect
 )
+
+//replace github.com/k1ngalph0x/payflow/wallet-service => ../wallet-service
+replace github.com/k1ngalph0x/payflow/client => ../../client
 
 replace github.com/k1ngalph0x/payflow/wallet-service => ../wallet-service

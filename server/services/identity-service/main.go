@@ -6,11 +6,11 @@ import (
 	"net/http"
 
 	"github.com/gin-gonic/gin"
+	walletclient "github.com/k1ngalph0x/payflow/client/wallet"
 	"github.com/k1ngalph0x/payflow/identity-service/api"
 	"github.com/k1ngalph0x/payflow/identity-service/config"
 	"github.com/k1ngalph0x/payflow/identity-service/db"
 	"github.com/k1ngalph0x/payflow/identity-service/middleware"
-	grpcclient "github.com/k1ngalph0x/payflow/wallet-service/grpc"
 )
 
 func main() {
@@ -29,7 +29,7 @@ func main() {
 
 	defer conn.Close()
 
-	walletClient, err := grpcclient.NewWalletClient("localhost:50051")
+	walletClient, err := walletclient.NewWalletClient("localhost:50051")
 	if err != nil{
 		log.Fatal(err)
 	}

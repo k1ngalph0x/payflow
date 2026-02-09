@@ -42,3 +42,40 @@ make migrate-create # Create new migration
 
 SELECT \* from schema_migrations;
 UPDATE schema_migrations SET dirty = FALSE WHERE version = 2;
+
+## wallet -> identity -> merchant -> payment
+
+{
+"email": "tester@gmail.com",
+"password": "12345678",
+"role": "user"
+}
+
+{
+"message": "User created successfully",
+"role": "user",
+"token": "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJ1c2VyX2lkIjoiNWI2ZWVjNTUtN2Y4ZC00YjY3LWFmN2QtYTQyYzVkODFkNzE3IiwiZW1haWwiOiJ0ZXN0ZXJAZ21haWwuY29tIiwicm9sZSI6InVzZXIiLCJpc3MiOiJwYXlmbG93LWF1dGgiLCJzdWIiOiI1YjZlZWM1NS03ZjhkLTRiNjctYWY3ZC1hNDJjNWQ4MWQ3MTciLCJleHAiOjE3NzA3MTE3MTQsImlhdCI6MTc3MDYyNTMxNH0.Sw2QeTT7RqcAoqj618ede5-nELMoYrrV7Sh3olzxxt8"
+}
+
+MERCHANT
+{
+"email": "merchant@test.com",
+"password": "password123",
+"role": "merchant"
+}
+
+{
+"message": "User created successfully",
+"role": "merchant",
+"token": "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJ1c2VyX2lkIjoiMGVjYzg5YzMtZWIxZC00OTk3LWI3NjEtNjE1MjIwNzgzMTFjIiwiZW1haWwiOiJtZXJjaGFudEB0ZXN0LmNvbSIsInJvbGUiOiJtZXJjaGFudCIsImlzcyI6InBheWZsb3ctYXV0aCIsInN1YiI6IjBlY2M4OWMzLWViMWQtNDk5Ny1iNzYxLTYxNTIyMDc4MzExYyIsImV4cCI6MTc3MDcxMTg5NSwiaWF0IjoxNzcwNjI1NDk1fQ.NArdCeUeSCubt_fvApQl4bwSRmHnIK-TgQjl0x-aMbo"
+}
+
+merchant usr id auth - 0ecc89c3-eb1d-4997-b761-61522078311c
+
+{
+"merchant_id": "7ccacc97-b9e5-4251-a131-0414f7c1294a",
+"status": "ACTIVE"
+}
+
+DROP TABLE IF EXISTS payflow_merchants CASCADE;
+DROP TABLE IF EXISTS schema_migrations;

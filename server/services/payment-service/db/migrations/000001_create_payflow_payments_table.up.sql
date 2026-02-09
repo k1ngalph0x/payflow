@@ -11,5 +11,5 @@ CREATE TABLE IF NOT EXISTS payflow_payments(
 );
 
 
-CREATE INDEX idx_payflow_payments_user_id ON payflow_payments(user_id)
-CREATE INDEX idx_payflow_merchant_id ON payflow_payments(merchant_id)
+CREATE INDEX idx_payflow_payments_user_id ON payflow_payments(user_id);
+CREATE INDEX idx_payflow_merchant_id ON payflow_payments(merchant_id);

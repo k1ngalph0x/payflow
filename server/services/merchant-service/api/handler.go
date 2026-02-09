@@ -7,16 +7,16 @@ import (
 	"github.com/gin-gonic/gin"
 	"github.com/k1ngalph0x/payflow/merchant-service/config"
 
-	grpcclient "github.com/k1ngalph0x/payflow/wallet-service/grpc"
+	walletclient "github.com/k1ngalph0x/payflow/client/wallet"
 )
 
 type MerchantHandler struct {
 	DB *sql.DB
 	Config *config.Config
-	WalletClient *grpcclient.WalletClient
+	WalletClient *walletclient.WalletClient
 }
 
-func NewMerchantHandler(db *sql.DB, cfg *config.Config, walletclient *grpcclient.WalletClient) *MerchantHandler {
+func NewMerchantHandler(db *sql.DB, cfg *config.Config, walletclient *walletclient.WalletClient) *MerchantHandler {
 	return &MerchantHandler{DB: db, Config: cfg, WalletClient: walletclient}
 }
 type OnboardRequest struct{
@@ -57,6 +57,12 @@ func(h *MerchantHandler) Onboard(c *gin.Context){
 		c.JSON(http.StatusConflict, gin.H{"error": "Merchant already exists"})
 		return
 	}
+
+	err = h.WalletClient.CreateWallet(merchantId)
+	if err != nil{
+		c.JSON(http.StatusConflict, gin.H{"error": "Failed to create merchant wallet"})
+		return
+	} 
 
 	err = tx.Commit()
 	if err != nil{

@@ -7,6 +7,7 @@ require (
 	github.com/google/uuid v1.6.0
 	github.com/joho/godotenv v1.5.1
 	github.com/k1ngalph0x/payflow/identity-service v0.0.0
+	github.com/k1ngalph0x/payflow/client v0.0.0
 	github.com/lib/pq v1.11.1
 )
 
@@ -47,3 +48,4 @@ require (
 
 replace github.com/k1ngalph0x/payflow/identity-service => ../identity-service
 replace github.com/k1ngalph0x/payflow/wallet-service => ../wallet-service
+replace github.com/k1ngalph0x/payflow/client => ../../client

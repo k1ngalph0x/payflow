@@ -9,15 +9,15 @@ import (
 
 	"github.com/gin-gonic/gin"
 	"github.com/golang-jwt/jwt/v5"
+	walletclient "github.com/k1ngalph0x/payflow/client/wallet"
 	"github.com/k1ngalph0x/payflow/identity-service/config"
-	grpcclient "github.com/k1ngalph0x/payflow/wallet-service/grpc"
 	"golang.org/x/crypto/bcrypt"
 )
 
 type Handler struct{
 	DB *sql.DB
 	Config *config.Config
-	WalletClient *grpcclient.WalletClient
+	WalletClient *walletclient.WalletClient
 }
 
 type SignUpRequest struct{
@@ -38,7 +38,7 @@ type Claims struct{
 	jwt.RegisteredClaims
 }
 
-func NewHandler(db *sql.DB, cfg *config.Config, walletclient *grpcclient.WalletClient) *Handler {
+func NewHandler(db *sql.DB, cfg *config.Config, walletclient *walletclient.WalletClient) *Handler {
 	return &Handler{DB: db, Config: cfg, WalletClient: walletclient}
 }
 

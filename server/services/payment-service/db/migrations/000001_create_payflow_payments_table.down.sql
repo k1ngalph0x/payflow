@@ -1,1 +1,1 @@
-DROP TABLE IF EXISTS paylow_payments;
+DROP TABLE IF EXISTS payflow_payments;
