@@ -5,6 +5,8 @@ import (
 	"log"
 	"net"
 
+	"github.com/gin-gonic/gin"
+	"github.com/k1ngalph0x/payflow/identity-service/middleware"
 	"github.com/k1ngalph0x/payflow/wallet-service/api"
 	"github.com/k1ngalph0x/payflow/wallet-service/config"
 	"github.com/k1ngalph0x/payflow/wallet-service/db"
@@ -21,7 +23,6 @@ func main() {
 		log.Fatalf("Error loading config: ", err)
 	}
 
-	//Connect to db
 	conn, err := db.ConnectDB()
 
 	if err != nil {
@@ -30,19 +31,33 @@ func main() {
 
 	defer conn.Close()	
 
-	//Connect to port tcp
-	listener, err := net.Listen("tcp", ":50051")
-	if err != nil{
-		log.Fatal(err)
-	}
-
-	grpcServer := grpc.NewServer()
-
 	walletHandler := api.NewWalletHandler(conn, cfg)
-	
-	walletpb.RegisterWalletServiceServer(grpcServer, walletHandler)
 
-	fmt.Println("Running wallet-service")
+	go func() {
+		listener, err := net.Listen("tcp", ":50051")
+		if err != nil {
+			log.Fatal(err)
+		}
 
-	grpcServer.Serve(listener)
+		grpcServer := grpc.NewServer()
+		walletpb.RegisterWalletServiceServer(grpcServer, walletHandler)
+
+		fmt.Println("Wallet-Service running on :50051")
+		err = grpcServer.Serve(listener)
+		if err != nil {
+			log.Fatal(err)
+		}
+	}()
+
+	httpHandler := api.NewHTTPHandler(walletHandler)
+	authMiddleware := middleware.NewAuthMiddleware(cfg.TOKEN.JwtKey)
+
+	router := gin.Default()
+	router.Use(gin.Logger())
+	router.Use(authMiddleware.RequireAuth())
+
+	router.GET("/wallet/balance", httpHandler.GetBalance)
+	router.GET("/wallet/transactions", httpHandler.GetTransactions)
+
+	router.Run(":50052")
 }

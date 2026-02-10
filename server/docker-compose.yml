@@ -1,0 +1,104 @@
+version: "3.8"
+
+services:
+  postgres:
+    image: postgres:15-alpine
+    container_name: payflow-postgres
+    environment:
+      POSTGRES_USER: postgres
+      POSTGRES_PASSWORD: shashank
+      POSTGRES_DB: postgres
+    ports:
+      - "5432:5432"
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U postgres"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  rabbitmq:
+    image: rabbitmq:3-management-alpine
+    container_name: payflow-rabbitmq
+    ports:
+      - "5672:5672"
+      - "15672:15672"
+    environment:
+      RABBITMQ_DEFAULT_USER: guest
+      RABBITMQ_DEFAULT_PASS: guest
+    healthcheck:
+      test: ["CMD", "rabbitmq-diagnostics", "ping"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  wallet-service:
+    build:
+      context: ./services/wallet-service
+      dockerfile: Dockerfile
+    container_name: payflow-wallet
+    ports:
+      - "50051:50051"
+      - "50052:50052"
+    environment:
+      DB_URL: "host=postgres port=5432 dbname=postgres user=postgres password=shashank sslmode=disable"
+      JwtKey: "Thisissupersecretkey9000"
+    depends_on:
+      postgres:
+        condition: service_healthy
+    restart: unless-stopped
+
+  identity-service:
+    build:
+      context: ./services/identity-service
+      dockerfile: Dockerfile
+    container_name: payflow-identity
+    ports:
+      - "8080:8080"
+    environment:
+      DB_URL: "host=postgres port=5432 dbname=postgres user=postgres password=shashank sslmode=disable"
+      JwtKey: "Thisissupersecretkey9000"
+      WALLET_SERVICE_ADDR: "wallet-service:50051"
+    depends_on:
+      - postgres
+      - wallet-service
+    restart: unless-stopped
+
+  merchant-service:
+    build:
+      context: ./services/merchant-service
+      dockerfile: Dockerfile
+    container_name: payflow-merchant
+    ports:
+      - "8082:8082"
+    environment:
+      DB_URL: "host=postgres port=5432 dbname=postgres user=postgres password=shashank sslmode=disable"
+      JwtKey: "Thisissupersecretkey9000"
+      Wallet_Client: "wallet-service:50051"
+    depends_on:
+      - postgres
+      - wallet-service
+    restart: unless-stopped
+
+  payment-service:
+    build:
+      context: ./services/payment-service
+      dockerfile: Dockerfile
+    container_name: payflow-payment
+    ports:
+      - "8081:8081"
+    environment:
+      DB_URL: "host=postgres port=5432 dbname=postgres user=postgres password=shashank sslmode=disable"
+      JwtKey: "Thisissupersecretkey9000"
+      PLATFORM_USER_ID: "646b4308-a1d0-4407-85a5-8208d0bb67e0"
+      RABBITMQ_URL: "amqp://guest:guest@rabbitmq:5672/"
+      WALLET_CLIENT: "wallet-service:50051"
+    depends_on:
+      - postgres
+      - rabbitmq
+      - wallet-service
+    restart: unless-stopped
+
+volumes:
+  postgres_data:

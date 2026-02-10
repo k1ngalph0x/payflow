@@ -13,6 +13,11 @@ import (
 type Config struct {
 	DB PostgresConfig
 	TOKEN TokenConfig
+	PLATFORM PlatformConfig
+}
+
+type PlatformConfig struct{
+	WalletClient string
 }
 
 type TokenConfig struct{
@@ -49,6 +54,9 @@ func LoadConfig() (*Config, error) {
 
 		TOKEN: TokenConfig{
 			JwtKey: os.Getenv("JwtKey"),
+		},
+		PLATFORM: PlatformConfig{
+			WalletClient: os.Getenv("WALLET_CLIENT"),
 		},
 	}
 

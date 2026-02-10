@@ -99,3 +99,8 @@ http://localhost:15672
 guest / guest
 
 docker run -d --name rabbitmq -p 5672:5672 -p 15672:15672 rabbitmq:3-management
+
+static const String authServiceUrl = 'http://192.168.0.102:8080';
+static const String merchantServiceUrl = 'http://192.168.0.102:8082';
+static const String paymentServiceUrl = 'http://192.168.0.102:8081';
+static const String walletServiceUrl = 'http://192.168.0.102:50052';

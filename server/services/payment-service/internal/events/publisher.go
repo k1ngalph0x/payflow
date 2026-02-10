@@ -12,8 +12,15 @@ type Publisher struct {
 	Channel *amqp.Channel
 }
 
+
+
 func NewPublisher(url string)(*Publisher, error){
 	conn, err := amqp.Dial(url)
+	queues := []string{
+	"payment.created",
+	"payment.captured",
+	}
+
 	if err != nil{
 		log.Fatal("payment-service/rabbitmq: - conn",err)
 	}
@@ -22,15 +29,22 @@ func NewPublisher(url string)(*Publisher, error){
 		if err != nil{
 		log.Fatal("payment-service/rabbitmq: - ch",err)
 	}
-
+	
+	for _, q := range queues {
 	_, err = ch.QueueDeclare(
-		"payment.created",
+		//"payment.created",
+		q,
 		true,
 		false,
 		false, 
 		false,
 		nil,
-	)
+		)
+		if err!=nil{
+			return nil,  err
+		}
+	}
+
 
 	if err!=nil{
 		return nil,  err

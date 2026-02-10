@@ -19,8 +19,7 @@ func main() {
 	if err != nil{
 		log.Fatalf("Error loading config: ", err)
 	}
-
-	//Connect to db
+	
 	conn, err := db.ConnectDB()
 
 	if err != nil{
@@ -29,7 +28,7 @@ func main() {
 
 	defer conn.Close()
 
-	walletClient, err := walletclient.NewWalletClient("localhost:50051")
+	walletClient, err := walletclient.NewWalletClient(cfg.PLATFORM.WalletClient)
 	if err != nil{
 		log.Fatal(err)
 	}
@@ -37,13 +36,14 @@ func main() {
 	authMiddleware := middleware.NewAuthMiddleware(cfg.TOKEN.JwtKey)
 
 
-	//Routes config
+
 	router := gin.Default()
 	router.Use(gin.Logger())
 
 	router.Use(authMiddleware.RequireAuth())
-
+	router.GET("/merchant/list", handler.GetMerchants) 
 	router.POST("/merchant/onboard", handler.Onboard)
+	router.GET("/merchant/onboarding/status", handler.OnboardingStatus)
 
 	router.Run(":8082")
 

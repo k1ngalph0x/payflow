@@ -42,14 +42,17 @@ func main() {
 	router.Use(gin.Logger())
 
 	auth := router.Group("/auth")
-	auth.POST("/signup", handler.SignUp)
+	auth.POST("/signup", handler.SignUp)	
 	auth.POST("/signin", handler.SignIn)
+	auth.POST("/refresh", handler.Refresh)
+
 	///////////////////////////////////
 
 	protected := router.Group("/api")
 	protected.Use(authMiddleware.RequireAuth())
 	{
 		protected.GET("/profile", Profile)
+		
 	}
 
 	/////////////////////////////////

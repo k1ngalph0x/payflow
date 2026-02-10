@@ -28,7 +28,7 @@ func main() {
 
 	defer conn.Close()
 
-	walletClient, err := walletclient.NewWalletClient("localhost:50051")
+	walletClient, err := walletclient.NewWalletClient(cfg.PLATFORM.WalletClient)
 	if err != nil{
 		log.Fatal(err)
 	}
@@ -40,7 +40,19 @@ func main() {
 	defer publisher.Conn.Close()
 	defer publisher.Channel.Close()
 
-	go worker.StartSettlementWorker(conn, cfg, walletClient, cfg.PLATFORM.RabbitMQURL)
+	go worker.StartSettlementWorker(
+		conn,
+		cfg,
+		walletClient,
+		cfg.PLATFORM.RabbitMQURL,
+	)
+
+	go worker.StartMerchantSettlementWorker(
+		conn,
+		cfg,
+		walletClient,
+		cfg.PLATFORM.RabbitMQURL,
+	)
 
 	handler := api.NewPaymentHandler(conn, cfg,  publisher)
 	authMiddleware := middleware.NewAuthMiddleware(cfg.TOKEN.JwtKey)
@@ -51,6 +63,8 @@ func main() {
 	router.Use(authMiddleware.RequireAuth())
 
 	router.POST("/payments", handler.CreatePayment)
+	router.GET("/payments/status", handler.GetPaymentStatus)    
+	router.GET("/payments/history", handler.GetPaymentHistory) 
 	//router.POST("/payments/:reference/settle", handler.SettlePayment) 
 
 	router.Run(":8081")

@@ -1,8 +1,11 @@
 package api
 
 import (
+	"crypto/rand"
 	"database/sql"
+	"encoding/base64"
 	"fmt"
+
 	"net/http"
 	"strings"
 	"time"
@@ -45,6 +48,7 @@ func NewHandler(db *sql.DB, cfg *config.Config, walletclient *walletclient.Walle
 func(h *Handler) GenerateJWT(userId, email, role string)(string, error){
 
 	expiration := time.Now().Add(24 * time.Hour)
+	//expiration := time.Now().Add(15 * time.Minute)
 
 	claims := &Claims{
 		UserID: userId,
@@ -83,13 +87,11 @@ func(h *Handler) SignUp(c *gin.Context) {
 		return 
 	}
 
-	// check the inputs
 	if req.Email == "" || req.Password == ""{
 		c.JSON(http.StatusBadRequest, gin.H{"error":"Email and password are required"})
 		return 
 	}
 
-	//check the role
 	if req.Role != "user" && req.Role != "merchant"{
 		c.JSON(http.StatusBadRequest, gin.H{"error":"Role must be user or merchant"})
 		return 
@@ -98,7 +100,6 @@ func(h *Handler) SignUp(c *gin.Context) {
 	email := strings.ToLower(strings.TrimSpace(req.Email))
 	password := strings.TrimSpace(req.Password)
 
-	//existing mail check
 	var existingEmail string
 	query := `SELECT email FROM payflow_auth WHERE email = $1`
 	err = h.DB.QueryRow(query, email).Scan(&existingEmail)
@@ -112,7 +113,7 @@ func(h *Handler) SignUp(c *gin.Context) {
 		return 
 	}
 
-	//hash the password
+
 	hashedPassword, err := bcrypt.GenerateFromPassword([]byte(password), bcrypt.DefaultCost)
 	if err!=nil{
 		c.JSON(http.StatusInternalServerError, gin.H{"error":"Failed to create a new user"})
@@ -155,11 +156,37 @@ func(h *Handler) SignUp(c *gin.Context) {
 		return 
 	}
 
+	refreshToken, err := h.GenerateRefreshToken()
+	if err != nil{
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "Something went wrong"})
+		return 
+	}
+
+	expiresAt := time.Now().Add(30 * 24 * time.Hour)
+
+	insertQuery = `INSERT INTO payflow_refresh_tokens (user_id, token, expires_at)
+    				VALUES ($1, $2, $3)`
+	_, err = h.DB.Exec(insertQuery, userId, refreshToken, expiresAt)
+	if err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to store refresh token"})
+		return
+	}
+
 	err = h.WalletClient.CreateWallet(userId)
 	if err != nil{
 		c.JSON(http.StatusInternalServerError, gin.H{"error":"Failed to create wallet"})
 		return 
 	}
+	c.SetCookie(
+		"refresh_token",
+		refreshToken,
+		30*24*60*60,
+		"/",
+		"",
+		false, 
+		true,  
+	)
+
 
 	c.JSON(http.StatusCreated, gin.H{"message":"User created successfully", "token":token, "role": req.Role})
 }
@@ -215,6 +242,69 @@ func(h *Handler) SignIn(c *gin.Context) {
 		return 
 	}
 
+	refreshToken, err := h.GenerateRefreshToken()
+	if err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "Something went wrong"})
+		return
+	}
+
+	expiresAt := time.Now().Add(30 * 24 * time.Hour)
+	insertQuery := `INSERT INTO payflow_refresh_tokens (user_id, token, expires_at)
+    				VALUES ($1, $2, $3)`
+	_, err = h.DB.Exec(insertQuery, userId, refreshToken, expiresAt)
+	if err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to store refresh token"})
+		return
+	}
+
+	c.SetCookie("refresh_token",
+		refreshToken,
+		30*24*60*60,
+		"/",
+		"",
+		false,  
+		true,  
+	)
 
 	c.JSON(http.StatusOK, gin.H{"message":"Login successful", "token":token, "role":role})
+}
+
+func(h *Handler) GenerateRefreshToken() (string, error){
+	token := make([]byte, 32)
+	_, err := rand.Read(token)
+	if err != nil{
+		return "", err
+	}
+
+	    return base64.RawURLEncoding.EncodeToString(token), nil
+}
+
+func(h *Handler) Refresh(c *gin.Context){
+	refreshToken, err := c.Cookie("refresh_token")
+	var userId, role, email string
+	var expiresAt time.Time
+	if err != nil {
+        c.JSON(http.StatusUnauthorized, gin.H{"error": "Missing refresh token"})
+        return
+    }
+
+	query := `
+        SELECT rt.user_id, a.email, a.role, rt.expires_at
+        FROM payflow_refresh_tokens rt
+        JOIN payflow_auth a ON a.id = rt.user_id
+        WHERE rt.token = $1
+    `
+	err = h.DB.QueryRow(query, refreshToken).Scan(&userId, &email, &role, &expiresAt)
+	if err != nil || time.Now().After(expiresAt) {
+        c.JSON(http.StatusUnauthorized, gin.H{"error": "Invalid refresh token"})
+        return
+    }
+
+	token, err := h.GenerateJWT(userId, email, role)
+	if err != nil{
+		 c.JSON(http.StatusInternalServerError, gin.H{"error": "Something went wrong"})
+        return
+	}
+
+	 c.JSON(http.StatusOK, gin.H{"token": token})
 }

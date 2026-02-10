@@ -9,6 +9,7 @@ import (
 
 	walletclient "github.com/k1ngalph0x/payflow/client/wallet"
 	"github.com/k1ngalph0x/payflow/payment-service/config"
+	"github.com/k1ngalph0x/payflow/payment-service/internal/events"
 	walletpb "github.com/k1ngalph0x/payflow/wallet-service/proto"
 	amqp "github.com/rabbitmq/amqp091-go"
 )
@@ -31,6 +32,10 @@ func StartSettlementWorker(
 	// 	Reference string `json:"reference"`
 	// }
 
+	publisher, err := events.NewPublisher(rabbitURL)
+	if err != nil {
+		log.Fatal("Failed to create publisher:", err)
+	}
 
 	msgs, _ := ch.Consume(
 		"payment.created",
@@ -47,7 +52,7 @@ func StartSettlementWorker(
 			Reference string `json:"reference"`
 		}
 		json.Unmarshal(msg.Body, &event)
-		err := processSettlement(db, cfg, walletClient, event.Reference)
+		err := processSettlement(db, cfg, walletClient, publisher, event.Reference)
 		if err != nil{
 			log.Println("Settlement falied", err)
 			msg.Nack(false, false)
@@ -62,6 +67,7 @@ func processSettlement(
 	db *sql.DB,
 	cfg *config.Config,
 	walletClient *walletclient.WalletClient,
+	publisher *events.Publisher,
 	ref string,
 )error {
 	
@@ -103,6 +109,7 @@ func processSettlement(
 	}
 
 	err = tx.Commit()
+
 	if err != nil {
 		return err
 	}
@@ -136,6 +143,11 @@ func processSettlement(
 		`UPDATE payflow_payments SET status='FUNDS_CAPTURED' WHERE reference=$1`,
 		ref,
 	)
+
+	publisher.Publish("payment.captured", map[string]string{
+		"reference": ref,
+	})
+
 
 	return err
 

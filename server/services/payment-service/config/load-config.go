@@ -24,6 +24,7 @@ type TokenConfig struct{
 type PlatformConfig struct{
 	PlatformUserID string
 	RabbitMQURL string
+	WalletClient string
 }
 
 type PostgresConfig struct {
@@ -60,6 +61,7 @@ func LoadConfig() (*Config, error) {
 		PLATFORM: PlatformConfig{
 			PlatformUserID: os.Getenv("PLATFORM_USER_ID"),
 			RabbitMQURL: os.Getenv("RABBITMQ_URL"),
+			WalletClient: os.Getenv("WALLET_CLIENT"),
 		},
 	}
 

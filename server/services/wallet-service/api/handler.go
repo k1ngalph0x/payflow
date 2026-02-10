@@ -92,6 +92,7 @@ func(h *WalletHandler) GetTransactions(ctx context.Context, req *walletpb.GetTra
 func (h *WalletHandler) Debit(ctx context.Context, req *walletpb.DebitRequest)(*walletpb.TransactionResponse, error){
 	var walletID string
 	var balance float64
+	var existingTxnID string
 	var txnId string
 	tx, err := h.DB.BeginTx(ctx, nil)
 	if err != nil{
@@ -104,6 +105,23 @@ func (h *WalletHandler) Debit(ctx context.Context, req *walletpb.DebitRequest)(*
 	err = tx.QueryRow(query, req.UserId).Scan(&walletID, &balance)
 
 	if err != nil{
+		return nil, err
+	}
+
+		checkQuery := `
+	SELECT id FROM payflow_wallet_transactions
+	WHERE wallet_id = $1 AND reference = $2 AND type = 'DEBIT'
+	`
+	err = tx.QueryRow(checkQuery, walletID, req.Reference).Scan(&existingTxnID)
+
+	if err == nil {
+		return &walletpb.TransactionResponse{
+			TransactionId: existingTxnID,
+			Status: "SUCCESS",
+		}, nil
+	}
+
+	if err != sql.ErrNoRows {
 		return nil, err
 	}
 
@@ -147,6 +165,7 @@ func (h *WalletHandler) Debit(ctx context.Context, req *walletpb.DebitRequest)(*
 
 func(h *WalletHandler) Credit(ctx context.Context, req *walletpb.CreditRequest)(*walletpb.TransactionResponse, error){
 	var walletID string
+	var existingTxnID string
 	var txnId string
 	tx, err := h.DB.BeginTx(ctx, nil)
 	if err!= nil{
@@ -162,6 +181,24 @@ func(h *WalletHandler) Credit(ctx context.Context, req *walletpb.CreditRequest)(
 	if err!= nil{
 		return nil, err
 	}
+
+	checkQuery := `
+		SELECT id FROM payflow_wallet_transactions
+		WHERE wallet_id = $1 AND reference = $2 AND type = 'CREDIT'
+		`
+	err = tx.QueryRow(checkQuery, walletID, req.Reference).Scan(&existingTxnID)
+
+	if err == nil {
+		return &walletpb.TransactionResponse{
+			TransactionId: existingTxnID,
+			Status: "SUCCESS",
+		}, nil
+	}
+
+	if err != sql.ErrNoRows {
+		return nil, err
+	}
+
 
 	insertQuery := `
 	INSERT INTO payflow_wallet_transactions
