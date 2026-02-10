@@ -3,8 +3,8 @@ import 'package:flutter/services.dart';
 import 'package:flutter_screenutil/flutter_screenutil.dart';
 import 'package:get/get.dart';
 import 'package:payflow/common/binding/app_binding.dart';
-import 'package:payflow/utils/app_routes.dart';
-import 'package:payflow/utils/shared_pref.dart';
+import 'package:payflow/common/utils/app_routes.dart';
+import 'package:payflow/common/utils/shared_pref.dart';
 
 Future<void> main() async {
   WidgetsFlutterBinding.ensureInitialized();
