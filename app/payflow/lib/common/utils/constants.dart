@@ -1,10 +1,10 @@
 class Constants {
-  //static const String baseUrl = 'http://192.168.0.102:8080';
+  //static const String baseUrl = 'http://localhost:8080';
 
-  static const String authServiceUrl = 'http://192.168.0.102:8080';
-  static const String merchantServiceUrl = 'http://192.168.0.102:8082';
-  static const String paymentServiceUrl = 'http://192.168.0.102:8081';
-  static const String walletServiceUrl = 'http://192.168.0.102:50052';
+  static const String authServiceUrl = '';
+  static const String merchantServiceUrl = '';
+  static const String paymentServiceUrl = '';
+  static const String walletServiceUrl = '';
 
   static const String keyAuthToken = 'auth_token';
   static const String keyUserRole = 'user_role';
