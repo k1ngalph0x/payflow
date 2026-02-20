@@ -17,8 +17,8 @@ type Publisher struct {
 func NewPublisher(url string)(*Publisher, error){
 	conn, err := amqp.Dial(url)
 	queues := []string{
-	"payment.created",
-	"payment.captured",
+		"payment.created",
+		"payment.captured",
 	}
 
 	if err != nil{
@@ -32,7 +32,6 @@ func NewPublisher(url string)(*Publisher, error){
 	
 	for _, q := range queues {
 	_, err = ch.QueueDeclare(
-		//"payment.created",
 		q,
 		true,
 		false,

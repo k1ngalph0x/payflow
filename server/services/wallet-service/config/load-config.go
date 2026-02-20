@@ -6,18 +6,19 @@ import (
 	"github.com/joho/godotenv"
 )
 
-// type Config struct{
-// 	DB *sql.DB
-// }
 
 type Config struct {
 	DB PostgresConfig
 	TOKEN TokenConfig
+	WALLET WalletConfig
 }
 
 type TokenConfig struct{
 	JwtKey string
+}
 
+type WalletConfig struct{
+	Port string
 }
 
 type PostgresConfig struct {
@@ -49,6 +50,9 @@ func LoadConfig() (*Config, error) {
 
 		TOKEN: TokenConfig{
 			JwtKey: os.Getenv("JwtKey"),
+		},
+		WALLET: WalletConfig{
+			Port: os.Getenv("WALLET_PORT"),
 		},
 	}
 

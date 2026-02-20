@@ -1,40 +1,32 @@
 package db
 
 import (
-	"database/sql"
 	"fmt"
 
 	"github.com/k1ngalph0x/payflow/identity-service/config"
-	_ "github.com/lib/pq"
+	"gorm.io/driver/postgres"
+	"gorm.io/gorm"
+	"gorm.io/gorm/logger"
 )
 
-func ConnectDB() (*sql.DB, error){
-
+func ConnectDB() (*gorm.DB, error) {
 	config, err := config.LoadConfig()
 
-	if err!=nil{
+	if err != nil{
 		return nil, err
 	}
 
 	conn := fmt.Sprintf("host=%s port=%s user=%s password=%s dbname=%s sslmode=disable", config.DB.Host, config.DB.Port, config.DB.Username, config.DB.Password, config.DB.Dbname)
 
-	db, err := sql.Open("postgres", conn)
+	db, err := gorm.Open(postgres.Open(conn), &gorm.Config{
+		Logger: logger.Default.LogMode(logger.Info),
+	})
 
 	if err != nil{
-		//panic(err)
-		return nil, err
+		return nil, fmt.Errorf("failed to connect to database: %w", err)
 	}
 
-	//defer db.Close()
-
-	err = db.Ping()
-
-	if err != nil{
-		//panic(err)
-		return nil, err
-	}
-
-	fmt.Println("Successfully connected to Database!")
+	fmt.Println("Successfully connected to database")
 
 	return db, nil
 

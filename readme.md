@@ -1,125 +1,190 @@
-# Payflow - Payment Processing Platform
+# Payflow — Payment Processing Platform
 
-A microservices-based payment processing platform built with Go, demonstrating distributed systems concepts and event-driven architecture.
+A microservices-based payment processing platform built with Go and Flutter, demonstrating distributed systems concepts, event-driven architecture, and idempotent payment processing.
 
-## Overview
-
-Payflow is a payment platform that enables users to send and receive payments while merchants can accept payments from customers. The system is built using a microservices architecture with asynchronous payment settlement and idempotent operations.
+---
 
 ## Tech Stack
 
-**Backend:**
+**Backend:** Go · PostgreSQL · RabbitMQ · gRPC · Protocol Buffers · GORM
 
-- Go 1.21
-- PostgreSQL
-- RabbitMQ
-- gRPC
-- Protocol Buffers
+**Frontend:** Flutter · GetX
 
-**Frontend:**
+---
 
-- Flutter
-- GetX (State Management)
+## Architecture
 
-**Architecture:**
+Payflow consists of four independent microservices communicating over gRPC (internally) and REST (externally).
 
-- Microservices Architecture
-- Event-Driven Design
-- RESTful APIs
-- Inter-service Communication (gRPC)
+```
+Mobile/Browser
+      │
+      │ HTTP/JSON
+      ▼
+┌─────────────────────────────────────────┐
+│  Identity Service  :8080                │
+│  Merchant Service  :8082                │
+│  Payment Service   :8081                │
+│  Wallet HTTP       :8083                │
+└─────────────────────────────────────────┘
+      │
+      │ gRPC
+      ▼
+┌─────────────────────────────────────────┐
+│  Wallet Service    :50051               │
+└─────────────────────────────────────────┘
+      │
+      │ RabbitMQ
+      ▼
+┌─────────────────────────────────────────┐
+│  Settlement Worker   (payment.created)  │
+│  Merchant Worker     (payment.captured) │
+└─────────────────────────────────────────┘
+```
 
-## System Architecture
+### Services
 
-The platform consists of four independent microservices:
+| Service          | Port                       | Responsibility                                  |
+| ---------------- | -------------------------- | ----------------------------------------------- |
+| Identity Service | 8080                       | Auth, JWT, refresh tokens                       |
+| Merchant Service | 8082                       | Merchant onboarding and profiles                |
+| Payment Service  | 8081                       | Payment creation, idempotency, event publishing |
+| Wallet Service   | 50051 (gRPC) / 8083 (HTTP) | Wallet balances and transaction history         |
 
-- **Identity Service** (Port 8080): Handles user authentication, JWT token generation, and refresh token management
-- **Merchant Service** (Port 8082): Manages merchant onboarding and profiles
-- **Payment Service** (Port 8081): Processes payment creation with idempotency support and publishes settlement events
-- **Wallet Service** (gRPC :50051, HTTP :50052): Manages user/merchant wallet balances and transaction history
+---
+
+## Payment Settlement Flow
+
+```
+POST /payments
+    → payment row created (status: CREATED)
+    → event published to payment.created queue
+
+Settlement Worker (payment.created)
+    → status: PROCESSING
+    → debit user wallet (gRPC)
+    → credit platform wallet (gRPC)
+    → status: FUNDS_CAPTURED
+    → event published to payment.captured queue
+
+Merchant Worker (payment.captured)
+    → debit platform wallet (gRPC)
+    → credit merchant wallet (gRPC)
+    → status: SETTLED
+```
+
+---
 
 ## Key Features
 
-- User and merchant authentication with JWT and refresh tokens
-- Idempotent payment processing with request hash validation
-- Asynchronous payment settlement using RabbitMQ
-- Wallet management with transaction-level idempotency
-- Real-time balance and transaction history
-- Role-based access control
+- **JWT authentication** with 15-minute access tokens and 30-day refresh tokens
+- **Role-based access control** — user and merchant roles with middleware enforcement
+- **Idempotent payments** — `Idempotency-Key` header with request hash validation prevents duplicate charges on retries
+- **Async settlement** via RabbitMQ keeps payment creation fast and decoupled from wallet operations
+- **Transaction-level idempotency** — wallet debit/credit operations are idempotent via reference field deduplication
+- **Row-level locking** on wallet operations prevents race conditions during concurrent transactions
+- **GORM AutoMigrate** — schema managed in code, no manual SQL migrations
 
-## Project Structure
-
-```
-.
-├── server/
-│   ├── services/
-│   │   ├── identity-service/
-│   │   ├── merchant-service/
-│   │   ├── payment-service/
-│   │   └── wallet-service/
-│   ├── client/
-│   └── Makefile
-└── client/ (Flutter app)
-```
+---
 
 ## Prerequisites
 
-- Go 1.21 or higher
+- Go 1.21+
 - PostgreSQL 15+
 - RabbitMQ
-- Flutter SDK (for mobile app)
-- Make (optional, for running commands)
+- Flutter SDK
 
-## Environment Setup
+---
 
-Each service requires a `.env` file with the following variables:
+## Environment Variables
+
+Each service has its own `.env` file. Below are the required variables per service.
+
+**Identity Service**
 
 ```env
-DB_URL="host=localhost port=5432 dbname=postgres user=postgres password=yourpassword sslmode=disable"
-JwtKey="your-secret-key"
-WALLET_SERVICE_ADDR="localhost:50051"
-RABBITMQ_URL="amqp://guest:guest@localhost:5672/"
-PLATFORM_USER_ID="your-platform-user-id"
+DB_HOST=localhost
+DB_PORT=5432
+DB_NAME=payflow_auth
+DB_USERNAME=postgres
+DB_PASSWORD=yourpassword
+JwtKey=your-secret-key
+WALLET_CLIENT=localhost:50051
 ```
 
-## Running the Application
+**Merchant Service**
 
-### Start Infrastructure
+```env
+DB_HOST=localhost
+DB_PORT=5432
+DB_NAME=payflow_auth
+DB_USERNAME=postgres
+DB_PASSWORD=yourpassword
+JwtKey=your-secret-key
+WALLET_CLIENT=localhost:50051
+```
+
+**Payment Service**
+
+```env
+DB_HOST=localhost
+DB_PORT=5432
+DB_NAME=payflow_auth
+DB_USERNAME=postgres
+DB_PASSWORD=yourpassword
+JwtKey=your-secret-key
+WALLET_CLIENT=localhost:50051
+RABBITMQ_URL=amqp://guest:guest@localhost:5672/
+PLATFORM_USER_ID=your-platform-wallet-user-id
+```
+
+**Wallet Service**
+
+```env
+DB_HOST=localhost
+DB_PORT=5432
+DB_NAME=payflow_auth
+DB_USERNAME=postgres
+DB_PASSWORD=yourpassword
+JwtKey=your-secret-key
+WALLET_PORT=50051
+```
+
+> **Note:** All services share a single PostgreSQL database in this setup. The platform user wallet must be pre-created manually before processing payments.
+
+---
+
+## Running Locally
+
+**1. Start infrastructure**
 
 ```bash
-# Start PostgreSQL
-# Start RabbitMQ
+# PostgreSQL and RabbitMQ must be running
 ```
 
-### Start Backend Services
-
-**Using Makefile:**
+**2. Start services in order** (wallet service must be first — others depend on it via gRPC)
 
 ```bash
-cd server
-make dev
+# Terminal 1
+cd server/services/wallet-service && go run main.go
+
+# Terminal 2
+cd server/services/identity-service && go run main.go
+
+# Terminal 3
+cd server/services/merchant-service && go run main.go
+
+# Terminal 4
+cd server/services/payment-service && go run main.go
 ```
 
-**Manual start:**
+Or using Make:
 
 ```bash
-# Terminal 1 - Wallet Service
-cd server/services/wallet-service
-go run main.go
-
-# Terminal 2 - Identity Service
-cd server/services/identity-service
-go run main.go
-
-# Terminal 3 - Merchant Service
-cd server/services/merchant-service
-go run main.go
-
-# Terminal 4 - Payment Service
-cd server/services/payment-service
-go run main.go
+cd server && make dev
 ```
 
-### Run Flutter App
+**3. Run Flutter app**
 
 ```bash
 cd client
@@ -127,95 +192,58 @@ flutter pub get
 flutter run
 ```
 
-## API Endpoints
+---
 
-### Identity Service (8080)
+## API Reference
 
-- POST `/auth/signup` - User/Merchant registration
-- POST `/auth/signin` - User login
-- POST `/auth/refresh` - Refresh access token
+### Identity Service — `localhost:8080`
 
-### Merchant Service (8082)
+| Method | Endpoint        | Auth | Description                     |
+| ------ | --------------- | ---- | ------------------------------- |
+| POST   | `/auth/signup`  | No   | Register user or merchant       |
+| POST   | `/auth/signin`  | No   | Sign in, returns JWT            |
+| POST   | `/auth/refresh` | No   | Refresh access token via cookie |
 
-- POST `/merchant/onboard` - Merchant onboarding
-- GET `/merchant/onboarding/status` - Check onboarding status
-- GET `/merchant/list` - List active merchants
+### Merchant Service — `localhost:8082`
 
-### Payment Service (8081)
+| Method | Endpoint                      | Auth           | Description             |
+| ------ | ----------------------------- | -------------- | ----------------------- |
+| POST   | `/merchant/onboard`           | Yes (merchant) | Onboard merchant        |
+| GET    | `/merchant/onboarding/status` | Yes (merchant) | Check onboarding status |
+| GET    | `/merchant/list`              | Yes            | List active merchants   |
 
-- POST `/payments` - Create payment (requires Idempotency-Key header)
-- GET `/payments/status?reference={ref}` - Check payment status
-- GET `/payments/history` - Payment history
+### Payment Service — `localhost:8081`
 
-### Wallet Service (50052)
+| Method | Endpoint                      | Auth | Description                                        |
+| ------ | ----------------------------- | ---- | -------------------------------------------------- |
+| POST   | `/payments`                   | Yes  | Create payment — requires `Idempotency-Key` header |
+| GET    | `/payments/status?reference=` | Yes  | Poll payment status                                |
+| GET    | `/payments/history`           | Yes  | Paginated payment history                          |
 
-- GET `/wallet/balance` - Get wallet balance
-- GET `/wallet/transactions` - Transaction history
+### Wallet Service — `localhost:8083`
 
-## Implementation Highlights
+| Method | Endpoint               | Auth | Description                   |
+| ------ | ---------------------- | ---- | ----------------------------- |
+| GET    | `/wallet/balance`      | Yes  | Get wallet balance            |
+| GET    | `/wallet/transactions` | Yes  | Paginated transaction history |
 
-### Idempotency
-
-Payment creation uses idempotency keys with request hash validation to prevent duplicate charges on network retries.
-
-### Asynchronous Settlement
-
-Payment settlement is handled asynchronously through RabbitMQ, ensuring the payment creation API remains fast and responsive.
-
-### Transaction Safety
-
-Wallet operations use database transactions with row-level locking to prevent race conditions during concurrent debits/credits.
-
-### Reference-Based Idempotency
-
-Wallet debit/credit operations check for existing transactions using the reference field, ensuring idempotent behavior at the transaction level.
+---
 
 ## Database Schema
 
-Each service maintains its own database with the following key tables:
+All services share one PostgreSQL instance with the following tables:
 
-- **Identity Service**: `payflow_auth`, `payflow_refresh_tokens`
-- **Merchant Service**: `payflow_merchants`
-- **Payment Service**: `payflow_payments`, `payflow_idempotency_keys`
-- **Wallet Service**: `payflow_wallets`, `payflow_wallet_transactions`
+| Table              | Service  | Description           |
+| ------------------ | -------- | --------------------- |
+| `users`            | Identity | User accounts         |
+| `refresh_tokens`   | Identity | Refresh token store   |
+| `merchants`        | Merchant | Merchant profiles     |
+| `payments`         | Payment  | Payment records       |
+| `idempotency_keys` | Payment  | Idempotency key store |
+| `wallets`          | Wallet   | Wallet balances       |
+| `transactions`     | Wallet   | Transaction ledger    |
 
-## Development
-
-### Build All Services
-
-```bash
-make build
-```
-
-### Download Dependencies
-
-```bash
-make deps
-```
-
-### Stop Services
-
-```bash
-make stop
-```
-
-### Clean Artifacts
-
-```bash
-make clean
-```
-
-## Testing
-
-Run tests for all services:
-
-```bash
-make test
-```
-
-## License
-
-MIT
+---
 
 ## Author
 

@@ -6,10 +6,6 @@ import (
 	"github.com/joho/godotenv"
 )
 
-// type Config struct{
-// 	DB *sql.DB
-// }
-
 type Config struct {
 	DB PostgresConfig
 	TOKEN TokenConfig

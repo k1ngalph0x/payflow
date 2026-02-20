@@ -1,7 +1,6 @@
 package main
 
 import (
-	"fmt"
 	"log"
 	"net/http"
 
@@ -11,33 +10,36 @@ import (
 	"github.com/k1ngalph0x/payflow/identity-service/config"
 	"github.com/k1ngalph0x/payflow/identity-service/db"
 	"github.com/k1ngalph0x/payflow/identity-service/middleware"
+	"github.com/k1ngalph0x/payflow/identity-service/models"
 )
 
 func main() {
 
-	cfg, err := config.LoadConfig()
+	config, err := config.LoadConfig()
 	if err != nil{
-		log.Fatalf("Error loading config: ", err)
+		log.Fatalf("Error loading config: %v", err)
 	}
 
-	//Connect to db
 	conn, err := db.ConnectDB()
-
 	if err != nil{
-		log.Fatalf("Error connecting to database: ", err)
+		log.Fatalf("Error connecting to database: %v", err)
 	}
 
-	defer conn.Close()
-
-	walletClient, err := walletclient.NewWalletClient("localhost:50051")
-	if err != nil{
-		log.Fatal(err)
+	err = conn.AutoMigrate(
+		&models.User{}, 
+		&models.RefreshToken{}); 
+	if err != nil {
+		log.Fatalf("failed to run migrations: %v", err)
 	}
-	handler := api.NewHandler(conn, cfg, walletClient)
-	authMiddleware := middleware.NewAuthMiddleware(cfg.TOKEN.JwtKey)
 
+	walletClient, err := walletclient.NewWalletClient(config.WALLET.WalletClient)
+	if err != nil{
+		log.Fatalf("Error creating wallet client: %v", err)
+	}
 
-	//Routes config
+	handler := api.NewHandler(conn, config, walletClient)
+	authMiddleware := middleware.NewAuthMiddleware(config.TOKEN.JwtKey)
+
 	router := gin.Default()
 	router.Use(gin.Logger())
 
@@ -46,19 +48,17 @@ func main() {
 	auth.POST("/signin", handler.SignIn)
 	auth.POST("/refresh", handler.Refresh)
 
-	///////////////////////////////////
-
 	protected := router.Group("/api")
 	protected.Use(authMiddleware.RequireAuth())
 	{
 		protected.GET("/profile", Profile)
-		
 	}
 
-	/////////////////////////////////
-	router.Run(":8080")
+	err = router.Run(":8080")
 
-	fmt.Println("Running auth-service")
+	if err != nil {
+		log.Fatalf("Server failed: %v", err)
+	}
 }
 
 func Profile(c *gin.Context){

@@ -2,7 +2,6 @@ package worker
 
 import (
 	"context"
-	"database/sql"
 	"encoding/json"
 	"log"
 	"time"
@@ -10,145 +9,95 @@ import (
 	walletclient "github.com/k1ngalph0x/payflow/client/wallet"
 	"github.com/k1ngalph0x/payflow/payment-service/config"
 	"github.com/k1ngalph0x/payflow/payment-service/internal/events"
+	"github.com/k1ngalph0x/payflow/payment-service/models"
 	walletpb "github.com/k1ngalph0x/payflow/wallet-service/proto"
 	amqp "github.com/rabbitmq/amqp091-go"
+	"gorm.io/gorm"
+	"gorm.io/gorm/clause"
 )
 
-func StartSettlementWorker(
-	db *sql.DB,
-	cfg *config.Config,
-	walletClient *walletclient.WalletClient,
-	rabbitURL string,
-) {
+func StartSettlementWorker(db *gorm.DB, cfg *config.Config, wc *walletclient.WalletClient, rabbitURL string) {
 	conn, err := amqp.Dial(rabbitURL)
-	if err != nil{
-		log.Fatal("payment-service/rabbitmq: - conn",err)
+	if err != nil {
+		log.Fatalf("settlement worker: amqp dial: %v", err)
 	}
+
 	ch, err := conn.Channel()
-	if err != nil{
-		log.Fatal("payment-service/rabbitmq: - ch",err)
+	if err != nil {
+		log.Fatalf("settlement worker: amqp channel: %v", err)
 	}
-	// var event struct{
-	// 	Reference string `json:"reference"`
-	// }
 
 	publisher, err := events.NewPublisher(rabbitURL)
 	if err != nil {
-		log.Fatal("Failed to create publisher:", err)
+		log.Fatalf("settlement worker: publisher: %v", err)
 	}
 
-	msgs, _ := ch.Consume(
-		"payment.created",
-		"",
-		false, 
-		false,
-		false,
-		false,
-		nil,
-	)
+	msgs, err := ch.Consume("payment.created", "", false, false, false, false, nil)
+	if err != nil {
+		log.Fatalf("settlement worker: consume: %v", err)
+	}
 
-	for msg := range msgs{
-		var event struct{
+	for msg := range msgs {
+		var event struct {
 			Reference string `json:"reference"`
 		}
-		json.Unmarshal(msg.Body, &event)
-		err := processSettlement(db, cfg, walletClient, publisher, event.Reference)
-		if err != nil{
-			log.Println("Settlement falied", err)
+		err = json.Unmarshal(msg.Body, &event); 
+		if err != nil {
 			msg.Nack(false, false)
 			continue
 		}
 
+		if err := processSettlement(db, cfg, wc, publisher, event.Reference); err != nil {
+			msg.Nack(false, false)
+			continue
+		}
 		msg.Ack(false)
 	}
 }
 
-func processSettlement(
-	db *sql.DB,
-	cfg *config.Config,
-	walletClient *walletclient.WalletClient,
-	publisher *events.Publisher,
-	ref string,
-)error {
-	
-	tx, err := db.Begin()
-	if err != nil {
-		return err
+func processSettlement(db *gorm.DB, cfg *config.Config, wc *walletclient.WalletClient, pub *events.Publisher, ref string) error {
+	result := db.Model(&models.Payment{}).Where("reference = ? AND status = ?", ref, models.PaymentStatusCreated).Update("status", models.PaymentStatusProcessing)
+
+	if result.Error != nil {
+		return result.Error
 	}
-	defer tx.Rollback() 
-
-	var payment struct{
-		UserId string
-		MerchantId string
-		Amount float64
-		Status string
-	}
-
-	query := `
-		SELECT user_id, merchant_id, amount, status
-		FROM payflow_payments
-		WHERE reference = $1
-		FOR UPDATE
-	`
-	err = tx.QueryRow(query, ref).Scan(&payment.UserId, &payment.MerchantId, &payment.Amount, &payment.Status,)
-
-	if err != nil{
-		return err
-	}
-
-	if payment.Status != "CREATED"{
+	if result.RowsAffected == 0 {
 		return nil
 	}
 
-	updateQuery := `UPDATE payflow_payments SET status = 'PROCESSING' WHERE reference = $1`
-
-	_, err = tx.Exec(updateQuery, ref)
-
-	if err!= nil{
-		return err
-	}
-
-	err = tx.Commit()
-
+	var payment models.Payment
+	err := db.Where("reference = ?", ref).First(&payment).Error; 
 	if err != nil {
 		return err
 	}
 
-	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
 	defer cancel()
 
-	_, err = walletClient.Client.Debit(ctx, &walletpb.DebitRequest{
-		UserId: payment.UserId,
-		Amount: payment.Amount,
+	_, err = wc.Client.Debit(ctx, &walletpb.DebitRequest{
+		UserId:    payment.UserID,
+		Amount:    payment.Amount,
 		Reference: ref,
 	})
-
-	if err != nil{
-		db.Exec(`UPDATE payflow_payments SET status='FAILED' WHERE reference=$1`, ref)
-		return err 
+	if err != nil {
+		db.Model(&models.Payment{}).Where("reference = ?", ref).Update("status", models.PaymentStatusFailed)
+		return err
 	}
 
-	_, err = walletClient.Client.Credit(ctx, &walletpb.CreditRequest{
+	_, err = wc.Client.Credit(ctx, &walletpb.CreditRequest{
 		UserId:    cfg.PLATFORM.PlatformUserID,
-		Amount: payment.Amount,
+		Amount:    payment.Amount,
 		Reference: ref,
 	})
-
-	if err != nil{
-		db.Exec(`UPDATE payflow_payments SET status='FAILED' WHERE reference=$1`, ref)
-		return err 
+	if err != nil {
+		db.Model(&models.Payment{}).Where("reference = ?", ref).Update("status", models.PaymentStatusFailed)
+		return err
 	}
 
-	_, err = db.Exec(
-		`UPDATE payflow_payments SET status='FUNDS_CAPTURED' WHERE reference=$1`,
-		ref,
-	)
+	result = db.Model(&models.Payment{}).Clauses(clause.OnConflict{DoNothing: true}).Where("reference = ?", ref).Update("status", models.PaymentStatusFundsCaptured)
+	if result.Error != nil {
+		return err
+	}
 
-	publisher.Publish("payment.captured", map[string]string{
-		"reference": ref,
-	})
-
-
-	return err
-
+	return pub.Publish("payment.captured", map[string]string{"reference": ref})
 }

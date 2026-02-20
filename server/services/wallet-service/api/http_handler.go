@@ -1,87 +1,70 @@
 package api
 
 import (
-	"context"
+	"errors"
 	"net/http"
 	"strconv"
-	"time"
 
 	"github.com/gin-gonic/gin"
-	walletpb "github.com/k1ngalph0x/payflow/wallet-service/proto"
+	"github.com/k1ngalph0x/payflow/wallet-service/models"
+	"gorm.io/gorm"
 )
 
-type HTTPHandler struct {
-	WalletHandler *WalletHandler
+type WalletHTTPHandler struct {
+	DB *gorm.DB
 }
 
-func NewHTTPHandler(walletHandler *WalletHandler) *HTTPHandler {
-	return &HTTPHandler{WalletHandler: walletHandler}
+
+func NewWalletHTTPHandler(db *gorm.DB) *WalletHTTPHandler {
+	return &WalletHTTPHandler{DB: db}
 }
 
-func (h *HTTPHandler) GetBalance(c *gin.Context) {
-	userId := c.GetString("user_id")
+func (h *WalletHTTPHandler) GetBalance(c *gin.Context) {
+	userID := c.GetString("user_id")
 
-	if userId == "" {
-		c.JSON(http.StatusBadRequest, gin.H{"error": "User ID is required"})
-		return
+	var wallet models.Wallet
+	result :=  h.DB.Where("user_id = ?", userID).First(&wallet)
+	if result.Error != nil{
+			c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to fetch balance"})
+			return 
+	}else if errors.Is(result.Error, gorm.ErrRecordNotFound){
+			c.JSON(http.StatusNotFound, gin.H{"error": "Wallet not found"})
+			return 
 	}
 
-	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
-	defer cancel()
-
-	resp, err := h.WalletHandler.GetBalance(ctx, &walletpb.GetBalanceRequest{
-		UserId: userId,
-	})
-
-	if err != nil {
-		c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to fetch balance"})
-		return
-	}
-
-	c.JSON(http.StatusOK, gin.H{"balance": resp.Balance})
+	c.JSON(http.StatusOK, gin.H{"balance": wallet.Balance})
 }
 
-func (h *HTTPHandler) GetTransactions(c *gin.Context) {
-	userId := c.GetString("user_id")
+func (h *WalletHTTPHandler) GetTransactions(c *gin.Context) {
+	userID := c.GetString("user_id")
+	limit, offset := parsePagination(c)
 
-	if userId == "" {
-		c.JSON(http.StatusBadRequest, gin.H{"error": "User ID is required"})
-		return
-	}
-
-	
-	limit := int32(20)
-	offset := int32(0)
-
-	if l := c.Query("limit"); l != "" {
-		if val, err := strconv.Atoi(l); err == nil && val > 0 && val <= 100 {
-			limit = int32(val)
-		}
-	}
-
-	if o := c.Query("offset"); o != "" {
-		if val, err := strconv.Atoi(o); err == nil && val >= 0 {
-			offset = int32(val)
-		}
-	}
-
-	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
-	defer cancel()
-
-	resp, err := h.WalletHandler.GetTransactions(ctx, &walletpb.GetTransactionsRequest{
-		UserId: userId,
-		Limit:  limit,
-		Offset: offset,
-	})
-
-	if err != nil {
+	var transactions []models.Transaction
+	result := h.DB.Where("user_id = ?", userID).Order("created_at DESC").Limit(limit).Offset(offset).Find(&transactions)
+	if result.Error != nil {
 		c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to fetch transactions"})
 		return
 	}
 
 	c.JSON(http.StatusOK, gin.H{
-		"transactions": resp.Transactions,
+		"transactions": transactions,
 		"limit":        limit,
 		"offset":       offset,
 	})
+}
+
+func parsePagination(c *gin.Context) (limit, offset int) {
+	limit = 20
+	offset = 0
+	if l := c.Query("limit"); l != "" {
+		if v, err := strconv.Atoi(l); err == nil && v > 0 && v <= 100 {
+			limit = v
+		}
+	}
+	if o := c.Query("offset"); o != "" {
+		if v, err := strconv.Atoi(o); err == nil && v >= 0 {
+			offset = v
+		}
+	}
+	return
 }

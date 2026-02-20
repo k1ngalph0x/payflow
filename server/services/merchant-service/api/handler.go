@@ -1,155 +1,122 @@
 package api
 
 import (
-	"database/sql"
+	"errors"
 	"net/http"
-	"time"
 
 	"github.com/gin-gonic/gin"
 	"github.com/k1ngalph0x/payflow/merchant-service/config"
+	"github.com/k1ngalph0x/payflow/merchant-service/models"
+	"gorm.io/gorm"
 
 	walletclient "github.com/k1ngalph0x/payflow/client/wallet"
 )
 
 type MerchantHandler struct {
-	DB *sql.DB
+	DB   *gorm.DB
 	Config *config.Config
 	WalletClient *walletclient.WalletClient
 }
 
-func NewMerchantHandler(db *sql.DB, cfg *config.Config, walletclient *walletclient.WalletClient) *MerchantHandler {
-	return &MerchantHandler{DB: db, Config: cfg, WalletClient: walletclient}
+func NewMerchantHandler(db *gorm.DB, config *config.Config, walletclient *walletclient.WalletClient) *MerchantHandler {
+	return &MerchantHandler{DB: db, Config: config, WalletClient: walletclient}
 }
-type OnboardRequest struct{
-	BusinessName string `json:"business_name"`
+
+type OnboardRequest struct {
+	BusinessName string `json:"business_name" binding:"required,min=2,max=100"`
 }
 
 
 func(h *MerchantHandler) Onboard(c *gin.Context){
-	userId := c.GetString("user_id")
+	userID := c.GetString("user_id")
 	role := c.GetString("role")
-	var req OnboardRequest
-	var merchantId string
+
 	if role != "merchant"{
 		c.JSON(http.StatusForbidden, gin.H{"error": "Only merchants can onboard"})
 		return 
 	}
 
+	var req OnboardRequest
 	err := c.ShouldBindJSON(&req)
 	if err != nil{
-		c.JSON(http.StatusInternalServerError, gin.H{"error": "Invalid request"})
-		return 
-	}
-	tx, err := h.DB.Begin()
-	if err != nil{
-		c.JSON(http.StatusInternalServerError, gin.H{"error": "Invalid request"})
+		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
 		return 
 	}
 
-	defer tx.Rollback()
-
-	query := `INSERT INTO payflow_merchants (user_id, business_name, status)
-	VALUES ($1, $2, 'ACTIVE')
-	RETURNING id
-	`
-
-	err = tx.QueryRow(query, userId, req.BusinessName).Scan(&merchantId)
-	if err != nil{
-		c.JSON(http.StatusConflict, gin.H{"error": "Merchant already exists"})
+	var existing models.Merchant
+	result := h.DB.Where("user_id = ?", userID).First(&existing)
+	if result.Error == nil{
+		c.JSON(http.StatusConflict, gin.H{"error": "Merchant already onboarded"})
+		return
+	}else if !errors.Is(result.Error, gorm.ErrRecordNotFound){
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "Something went wrong"})
 		return
 	}
 
-	err = h.WalletClient.CreateWallet(merchantId)
-	if err != nil{
-		c.JSON(http.StatusConflict, gin.H{"error": "Failed to create merchant wallet"})
-		return
-	} 
+	merchant := models.Merchant{
+		UserID:       userID,
+		BusinessName: req.BusinessName,
+		Status:       models.MerchantStatusActive,
+	}
 
-	err = tx.Commit()
+	err = h.DB.Transaction(func(tx *gorm.DB) error {
+		  err := tx.Create(&merchant).Error
+			if err != nil {
+				return err
+			}
+			err = h.WalletClient.CreateWallet(merchant.ID)
+			if err != nil{
+				return err
+			}
+			return nil
+	})
+
 	if err != nil{
 		c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to complete onboarding"})
 		return
 	}
 
 	c.JSON(http.StatusCreated, gin.H{
-		"merchant_id": merchantId,
-		"status":"ACTIVE",
+		"merchant_id": merchant.ID,
+		"status":      merchant.Status,
 	})
-
 }
 
 func(h *MerchantHandler) GetMerchants(c *gin.Context){
-	query := `
-		SELECT id, user_id, business_name, status, created_at
-		FROM payflow_merchants
-		WHERE status = 'ACTIVE'
-		ORDER BY business_name ASC
-	`
-	
-	rows, err := h.DB.Query(query)
-	if err != nil {
+
+	var merchants []models.Merchant
+	result := h.DB.Where("status = ?", models.MerchantStatusActive).Order("business_name ASC").Find(&merchants)
+	if result.Error != nil{
 		c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to fetch merchants"})
 		return
 	}
-	defer rows.Close()
-
-	var merchants []map[string]interface{}
-
-	for rows.Next() {
-		var id, userId, businessName, status string
-		var createdAt time.Time
-
-		err := rows.Scan(&id, &userId, &businessName, &status, &createdAt)
-		if err != nil {
-			continue
-		}
-
-		merchants = append(merchants, map[string]interface{}{
-			"id":            id,
-			"user_id":       userId,
-			"business_name": businessName,
-			"status":        status,
-			"created_at":    createdAt.Format(time.RFC3339),
-		})
-	}
-
+	
 	c.JSON(http.StatusOK, gin.H{"merchants": merchants})
 }
 func (h *MerchantHandler) OnboardingStatus(c *gin.Context) {
-	userId := c.GetString("user_id")
+	userID := c.GetString("user_id")
 	role := c.GetString("role")
-	var merchantId string
-	var status string
-	var businessName string 
-
-	if role != "merchant" {
+		if role != "merchant" {
 		c.JSON(http.StatusForbidden, gin.H{"error": "Only merchants are allowed"})
 		return
 	}
 
-	query := `
-		SELECT id, status, business_name
-		FROM payflow_merchants
-		WHERE user_id = $1
-		LIMIT 1
-	`
-
-	err := h.DB.QueryRow(query, userId).Scan(&merchantId, &status, &businessName)
-	if err == sql.ErrNoRows {
-		c.JSON(http.StatusOK, gin.H{
-			"onboarded": false,
-		})
-		return
-	}
-
-	if err != nil {
+	var merchant models.Merchant
+	result := h.DB.Where("user_id = ?", userID).First(&merchant)
+	if result.Error != nil{
 		c.JSON(http.StatusInternalServerError, gin.H{"error": "Something went wrong"})
 		return
 	}
+
+	if errors.Is(result.Error, gorm.ErrRecordNotFound) {
+		c.JSON(http.StatusOK, gin.H{"onboarded": false})
+		return
+	}
+
 	c.JSON(http.StatusOK, gin.H{
-		"onboarded":  status == "ACTIVE",
-		"merchant_id": merchantId,
-		"status":     status,
-		"business_name": businessName, 
+		"onboarded":     merchant.Status == models.MerchantStatusActive,
+		"merchant_id":   merchant.ID,
+		"status":        merchant.Status,
+		"business_name": merchant.BusinessName,
 	})
 }

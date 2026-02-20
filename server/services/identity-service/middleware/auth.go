@@ -10,13 +10,6 @@ import (
 	"github.com/k1ngalph0x/payflow/identity-service/api"
 )
 
-// type AuthMiddleware struct {
-// 	Config *config.Config
-// }
-
-// func NewAuthMiddleware(cfg *config.Config) *AuthMiddleware {
-// 	return &AuthMiddleware{Config: cfg}
-// }
 
 type AuthMiddleware struct {
 	JwtKey string
@@ -25,8 +18,6 @@ type AuthMiddleware struct {
 func NewAuthMiddleware(jwtKey string) *AuthMiddleware {
 	return &AuthMiddleware{JwtKey: jwtKey}
 }
-
-
 
 func (a *AuthMiddleware) RequireAuth() gin.HandlerFunc {
 	return func(c *gin.Context){
