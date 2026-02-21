@@ -244,7 +244,3 @@ All services share one PostgreSQL instance with the following tables:
 | `transactions`     | Wallet   | Transaction ledger    |
 
 ---
-
-## Author
-
-Built as a learning project to demonstrate microservices architecture, distributed systems concepts, and payment processing workflows.
